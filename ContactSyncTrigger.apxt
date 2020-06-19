@@ -1,0 +1,49 @@
+/**
+ * @class ContactSyncTrigger
+ * @description Update contacts w/ Pardot sync status run batch Pardot
+ *              create/deletion jobs.
+ *
+ * @author  Nathan M. House
+ * @created 27/4/2020
+ *
+ */
+trigger ContactSyncTrigger on Contact (before update, after insert, after update) {
+
+    if (Trigger.isInsert && Trigger.isAfter) {
+        Id queuePardotSyncId = System.enqueueJob(new PardotSync([
+            SELECT Contact.Id, Contact.Should_Sync_W_Pardot__c, Contact.Account.Child_Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Contact.Id IN :System.Trigger.new AND Contact.Id NOT IN :CheckRecursive.contactSyncIDs
+        ], System.Trigger.newMap));
+    }
+    
+    if (Trigger.isUpdate && Trigger.isAfter) {
+        List<Contact> prospectsToCreate = [
+            SELECT Id, Email, FirstName
+            FROM Contact
+            WHERE Id IN :System.Trigger.new AND Should_Sync_W_Pardot__c = TRUE AND Is_Pardot_Prospect__c  = FALSE AND Id NOT IN :CheckRecursive.pardotBatchIDs
+        ];
+        if (prospectsToCreate.size() > 0) {
+            PardotCreateProspectsFromContacts createProspects = new PardotCreateProspectsFromContacts(
+                new PardotWebCallout(),
+                prospectsToCreate,
+                System.Trigger.newMap
+            );
+            Id batchCreateProspectsId = Database.executeBatch(createProspects, 50);
+        }
+            
+        List<Contact> prospectsToDelete = [
+            SELECT Id, Email, FirstName
+            FROM Contact
+            WHERE Id IN :System.Trigger.new AND Should_Sync_W_Pardot__c = FALSE AND Is_Pardot_Prospect__c = TRUE AND Id NOT IN :CheckRecursive.pardotBatchIDs
+        ];
+        if (prospectsToDelete.size() > 0) {
+            PardotDeleteProspectsFromContacts deleteProspects = new PardotDeleteProspectsFromContacts(
+                new PardotWebCallout(),
+                prospectsToDelete,
+                System.Trigger.newMap
+            );
+            Id batchDeleteProspectsId = Database.executeBatch(deleteProspects, 50);
+        }
+    }
+}

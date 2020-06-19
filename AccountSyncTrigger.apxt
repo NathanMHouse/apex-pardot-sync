@@ -1,0 +1,21 @@
+/**
+ * @class AccountSyncTrigger
+ * @description Update contacts, assosciatd w/ triggering account,
+ *              w/ Pardot sync status.
+ *
+ * @author 	Nathan M. House
+ * @created 14/5/2020
+ *
+ */
+trigger AccountSyncTrigger on Account (after insert, after update) {
+    
+    if (Trigger.isAfter && Trigger.isUpdate){
+        AccountHandler.onAfterUpdate(trigger.oldMap, trigger.new);
+    }
+    
+    Id queuePardotSyncId = System.enqueueJob(new PardotSync([
+        SELECT Contact.Id, Contact.Should_Sync_W_Pardot__c, Contact.Account.Child_Should_Sync_W_Pardot__c
+        FROM Contact
+        WHERE Contact.Account.Id IN :System.Trigger.new AND Contact.Id NOT IN :CheckRecursive.contactSyncIDs
+    ], System.Trigger.newMap));
+}

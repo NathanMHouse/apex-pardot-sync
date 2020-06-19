@@ -1,0 +1,711 @@
+@isTest
+private class TestPardotSync {
+    
+    // Create a single account.
+    @isTest public static Void testCreateAccount() {
+        
+        Integer overallAccountCountBefore = [
+            SELECT Count()
+            FROM Account
+        ];
+        
+        Test.startTest();
+        
+        Account acct = new Account(
+            Name='Test Account'
+        );
+        
+        insert acct;
+        
+        Test.stopTest();
+        
+        Integer overallAccountCountAfter = [
+            SELECT Count()
+            FROM Account
+        ];
+        
+        // Tests
+        // 1. There should be 1 additional account.
+        System.assertEquals(overallAccountCountBefore + 1, overallAccountCountAfter);
+    }
+    
+    // Create multiple accounts.
+    @isTest public static Void testBulkCreateAccount() {
+        
+        Integer acctCount = 2;
+        
+        Integer overallAccountCountBefore = [
+            SELECT Count()
+            FROM Account
+        ];
+        
+        Test.startTest();
+        
+        List<Account> accts = new List<Account>();
+        
+        for (Integer i = 0; i < acctCount; i++) {
+            Account acct = new Account(
+                Name='Test Account ' + i
+            );
+            accts.add(acct);
+        }
+        
+        insert accts;
+        
+        Test.stopTest();
+        
+        Integer overallAccountCountAfter = [
+            SELECT Count()
+            FROM Account
+        ];
+        
+        // Tests
+        // 1. There should be n additional accounts.
+        System.assertEquals(overallAccountCountBefore + acctCount, overallAccountCountAfter);
+    }
+    
+    // Update a single account (with multiple contacts) to not sync w/ Pardot.
+    @isTest public static Void testUpdateAccountSyncFalse() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Integer contactCount = 50;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=TRUE
+        );
+        insert acct;
+        
+        List<Contact> ctcs = new List<Contact>();
+        for (Integer i = 0; i < contactCount; i++) {
+            
+            Contact ctc = new Contact(
+                FirstName='Test',
+                LastName='Contact ' + i,
+                Email='test' + i + '@test.com',
+                AccountId=acct.Id
+            );
+            
+            ctcs.add(ctc);
+        }
+        insert ctcs;
+        
+        Boolean accountSyncBehaviourBefore = acct.Child_Should_Sync_W_Pardot__c;
+        
+        Test.startTest();
+        
+        acct.Child_Should_Sync_W_Pardot__c = FALSE;
+        update acct;
+        
+        Test.stopTest();
+        
+        Boolean accountSyncBehaviourAfter = acct.Child_Should_Sync_W_Pardot__c;
+        
+        Integer contactSynchingCountAfter = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        List<Contact> contacts = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id IN :ctcs
+        ];
+        
+        // Tests
+        // 1. The account Child_Should_Sync_W_Pardot__c value should be different from its initial value.
+        // 2. The account Child_Should_Sync_W_Pardot__c should FALSE post operation.
+        // 3. There should be 0 synching Contacts post operation.
+        // 4. The contacts Should_Sync_W_Pardot__c should be FALSE post operation.
+        System.assertNotEquals(accountSyncBehaviourBefore, accountSyncBehaviourAfter);
+        System.assertEquals(FALSE, accountSyncBehaviourAfter);
+        System.assertEquals(0, contactSynchingCountAfter);
+        for(Contact ctc : contacts) {
+            System.assertEquals(FALSE, ctc.Should_Sync_W_Pardot__c);
+        }
+    }  
+    
+    // Update a single account (with multiple contacts) to sync w/ Pardot.
+    @isTest public static Void testUpdateAccountSyncTrue() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Integer contactCount = 50;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=FALSE
+            
+        );
+        insert acct;
+        
+        List<Contact> ctcs = new List<Contact>();
+        for (Integer i = 0; i < contactCount; i++) {
+            
+            Contact ctc = new Contact(
+                FirstName='Test',
+                LastName='Contact ' + i,
+                Email='test' + i + '@test.com',
+                AccountId=acct.Id
+            );
+            
+            ctcs.add(ctc);
+        }
+        insert ctcs;
+        
+        Boolean accountSyncBehaviourBefore = acct.Child_Should_Sync_W_Pardot__c;
+        
+        Integer contactSynchingCountBefore = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        Test.startTest();
+        
+        acct.Child_Should_Sync_W_Pardot__c = TRUE;
+        update acct;
+        
+        Test.stopTest();
+        
+        Boolean accountSyncBehaviourAfter = acct.Child_Should_Sync_W_Pardot__c;
+        
+        Integer contactSynchingCountAfter = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        List<Contact> contacts = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id IN :ctcs
+        ];
+        
+        // Tests
+        // 1. The account Child_Should_Sync_W_Pardot__c should be different from its initial value.
+        // 2. The account Child_Should_Sync_W_Pardot__c should TRUE post operation.
+        // 3. There should be n synching Contacts post operation.
+        // 4. The contacts Should_Sync_W_Pardot__c should be TRUE post operation.
+        System.assertNotEquals(accountSyncBehaviourBefore, accountSyncBehaviourAfter);
+        System.assertEquals(TRUE, accountSyncBehaviourAfter);
+        System.assertNotEquals(contactSynchingCountBefore, contactSynchingCountAfter);
+        System.assertEquals(contactCount, contactSynchingCountAfter);
+        for(Contact ctc : contacts) {
+            System.assertEquals(TRUE, ctc.Should_Sync_W_Pardot__c);
+        }
+    }
+    
+     // Update multiple accounts (with multiple contacts) to not synch w/ Pardot.
+    @isTest public static Void testBulkUpdateAccountSyncFalse() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Integer accountCount = 2;
+        Integer contactCount = 25;
+        
+        List<Account> accts = new List<Account>();
+        for (Integer i = 0; i < accountCount; i++) {
+            
+            Account acct = new Account(
+                Name='Test Account ' + i,
+                Child_Should_Sync_W_Pardot__c = TRUE
+            );
+            accts.add(acct);
+        }
+        insert accts;
+        
+        Integer accountSyncCountBefore = [
+            SELECT Count()
+            FROM Account
+            WHERE Child_Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        List<Contact> ctcs = new List<Contact>();
+        for (Integer i = 0; i < accountCount; i++) {
+            for (Integer j = 0; j < contactCount; j++) {
+                Contact ctc = new Contact(
+                    FirstName='Test',
+                    LastName='Contact ' + i + j,
+                    Email='test' + i + j + '@test.com',
+                    AccountId=accts[i].Id
+                );
+                
+                ctcs.add(ctc);
+            }
+        }
+        insert ctcs;
+        
+        Integer contactSyncCountBefore = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        Test.startTest();
+        
+        for (Account acct : accts) {
+            acct.Child_Should_Sync_W_Pardot__c = FALSE
+        }
+        update accts;
+        
+        Test.stopTest();
+        
+        Integer accountSyncCountAfter = [
+            SELECT Count()
+            FROM Account
+            WHERE Child_Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        Integer contactSyncCountAfter = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        List<Account> accounts = [
+            SELECT Id, Child_Should_Sync_W_Pardot__c
+            FROM Account
+            WHERE Id IN :accts
+        ];
+        
+        List<Contact> contacts = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id IN :ctcs
+        ];
+        
+        // Tests
+        // 1. The sync account count should be different post operation.
+        // 2. There should be n synching accounts on initilization.
+        // 3. There should be 0 synching accounts post operation.
+        // 4. There should be 0 synching contacts post operation.
+        // 5. The accounts Child_Should_Sync_W_Pardot__c should be FALSE.
+        // 6. The contacts Should_Sync_W_Pardot__c should be FALSE.
+        System.assertNotEquals(accountSyncCountBefore, accountSyncCountAfter);
+        System.assertEquals(accountCount, accountSyncCountBefore);
+        System.assertEquals(0, accountSyncCountAfter);
+        System.assertEquals(0, contactSyncCountAfter);
+        for(Account acct : accounts) {
+            System.assertEquals(FALSE, acct.Child_Should_Sync_W_Pardot__c);
+        }
+        for(Contact ctc : contacts) {
+            System.assertEquals(FALSE, ctc.Should_Sync_W_Pardot__c);
+        }
+    }
+    
+    // Update multiple accounts (with multiple contacts) to synch w/ Pardot.
+    @isTest public static Void testBulkUpdateAccountSyncTrue() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Integer accountCount = 2;
+        Integer contactCount = 25;
+        
+        List<Account> accts = new List<Account>();
+        for (Integer i = 0; i < accountCount; i++) {
+            
+            Account acct = new Account(
+                Name='Test Account ' + i,
+                Child_Should_Sync_W_Pardot__c=FALSE
+            );
+            accts.add(acct);
+        }
+        insert accts;
+        
+        Integer accountSyncCountBefore = [
+            SELECT Count()
+            FROM Account
+            WHERE Child_Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        List<Contact> ctcs = new List<Contact>();
+        for (Integer i = 0; i < accountCount; i++) {
+            for (Integer j = 0; j < contactCount; j++) {
+                Contact ctc = new Contact(
+                    FirstName='Test',
+                    LastName='Contact ' + i + j,
+                    Email='test' + i + j + '@test.com',
+                    AccountId=accts[i].Id
+                );
+                
+                ctcs.add(ctc);
+            }
+        }
+        insert ctcs;
+        
+        Integer contactSyncCountBefore = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        Test.startTest();
+        
+        for (Integer i = 0; i < accts.size(); i++) {
+            accts[i].Child_Should_Sync_W_Pardot__c = TRUE;
+        }
+        update accts;
+        
+        Test.stopTest();
+        
+        Integer accountSyncCountAfter = [
+            SELECT Count()
+            FROM Account
+            WHERE Child_Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        Integer contactSyncCountAfter = [
+            SELECT Count()
+            FROM Contact
+            WHERE Should_Sync_W_Pardot__c = TRUE
+        ];
+        
+        List<Account> accounts = [
+            SELECT Id, Child_Should_Sync_W_Pardot__c
+            FROM Account
+            WHERE Id IN :accts
+        ];
+        
+        List<Contact> contacts = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id IN :ctcs
+        ];
+        
+        // Tests
+        // 1. The synching account count should be different post operation.
+        // 2. There should be 0 synching accounts on initilization.
+        // 3. There should be n synching accounts post operation.
+        // 4. There should 0 synching contacts on initilization.
+        // 5. There should be n synching contacts post operation.
+        // 6. The accounts Child_Should_Sync_W_Pardot__c should not be FALSE.
+        // 7. The contacts Should_Sync_W_Pardot__c should not be FALSE.
+        System.assertNotEquals(accountSyncCountBefore, accountSyncCountAfter);
+        System.assertEquals(0, accountSyncCountBefore);
+        System.assertEquals(accountCount, accountSyncCountAfter);
+        System.assertEquals(0, contactSyncCountBefore);
+        System.assertEquals(contactCount * accountCount, contactSyncCountAfter);
+        for(Account acct : accounts) {
+            System.assertNotEquals(FALSE, acct.Child_Should_Sync_W_Pardot__c);
+        }
+        for(Contact ctc : contacts) {;
+            System.assertNotEquals(FALSE, ctc.Should_Sync_W_Pardot__c);
+        }
+    }
+    
+    // Create a single contact associated with an account set not sync w/ Pardot.
+    @isTest public static Void testCreateContactSyncFalse() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=FALSE
+        );
+        insert acct;
+        
+        Test.startTest();
+        
+        Contact ctc = new Contact(
+            FirstName='Test',
+            LastName='Contact',
+            Email='test@test.com',
+            AccountId=acct.Id
+        );
+        insert ctc;
+        
+        Test.stopTest();
+        
+        Contact contact = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id = :ctc.Id
+        ];
+        
+        // Tests
+        // 1. The contact Should_Sync_W_Pardot__c should be FALSE.
+        System.assertEquals(FALSE, contact.Should_Sync_W_Pardot__c); 
+    }
+    
+    // Create a single contact associated with an account set to sync w/ Pardot.
+    @isTest public static Void testCreateContactSyncTrue() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=TRUE
+        );
+        insert acct;
+        
+        Test.startTest();
+        
+        Contact ctc = new Contact(
+            FirstName='Test',
+            LastName='Contact',
+            Email='test@test.com',
+            AccountId=acct.Id
+        );
+        insert ctc;
+        
+        Test.stopTest();
+        
+        Account account = [
+            SELECT Id, Child_Should_Sync_W_Pardot__c
+            FROM Account
+            WHERE Id = :acct.Id
+        ];
+        
+        Contact contact = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id = :ctc.Id
+        ];
+        
+        // Tests
+        // 1. The contact Should_Sync_W_Pardot__c should be TRUE.
+        System.assertEquals(TRUE, contact.Should_Sync_W_Pardot__c);
+    }
+    
+    // Create a multiple contacts associated with an account set to not sync w/ Pardot.
+    @isTest public static Void testBulkCreateContactSyncFalse() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Integer contactCount = 50;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=FALSE
+        );
+        insert acct;
+        
+        Test.startTest();
+        
+        List<Contact> ctcs = new List<Contact>();
+        for (Integer i = 0; i < contactCount; i++) {
+            Contact ctc = new Contact(
+                FirstName='Test',
+                LastName='Contact ' + i,
+                Email='test' + i + '@test.com',
+                AccountId=acct.Id
+            );
+            ctcs.add(ctc);
+        }
+        
+        insert ctcs;
+        
+        Test.stopTest();
+        
+        List<Contact> contacts = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id IN :ctcs
+        ];
+        
+        // Tests
+        // 1. The contacts Should_Sync_W_Pardot__c should be FALSE.
+        for (Contact contact : contacts) {
+            System.assertEquals(FALSE, contact.Should_Sync_W_Pardot__c);            
+        }
+    }
+    
+    // Create a multiple contacts associated with an account set to sync w/ Pardot.
+    @isTest public static Void testBulkCreateContactSyncTrue() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Integer contactCount = 50;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=TRUE
+        );
+        insert acct;
+        
+        Test.startTest();
+        
+        List<Contact> ctcs = new List<Contact>();
+        for (Integer i = 0; i < contactCount; i++) {
+            Contact ctc = new Contact(
+                FirstName='Test',
+                LastName='Contact ' + i,
+                Email='test' + i + '@test.com',
+                AccountId=acct.Id
+            );
+            ctcs.add(ctc);
+        }
+        
+        insert ctcs;
+        
+        Test.stopTest();
+        
+        Account account = [
+            SELECT Id, Child_Should_Sync_W_Pardot__c
+            FROM Account
+            WHERE Id = :acct.Id
+        ];
+        
+        List<Contact> contacts = [
+            SELECT Id, Should_Sync_W_Pardot__c
+            FROM Contact
+            WHERE Id IN :ctcs
+        ];
+        
+        // Tests
+        // 1. The contacts Should_Sync_W_Pardot__c should be TRUE.
+        for (Contact contact : contacts) {
+            System.assertEquals(TRUE, contact.Should_Sync_W_Pardot__c);            
+        }
+    }
+
+    // Delete a Pardot prospect after updating the contact's associated account
+    // to not sync w/ Pardot.
+    @isTest public static Void testDeleteProspect() {
+        
+        StaticResourceCalloutMock mock = new StaticResourceCalloutMock();
+        mock.setStaticResource('mock_pardot_response');
+        mock.setStatusCode(200);
+        mock.setHeader('Content-Type', 'application/json');
+        
+        Test.setMock(HttpCalloutMock.class, mock);
+        
+        pardot_api_credentials__c setting = new pardot_api_credentials__c();
+        setting.Email__c    = 'test@test.com';
+        setting.Password__c = '1234';
+        setting.User_key__c = 'abcd1234';
+        insert setting;
+        
+        Account acct = new Account(
+            Name='Test Account',
+            Child_Should_Sync_W_Pardot__c=TRUE
+        );
+        insert acct;
+        
+        Contact ctc = new Contact(
+            FirstName='Test',
+            LastName='Contact',
+            Email='test@test.com',
+            AccountId=acct.Id,
+            Is_Pardot_Prospect__c=TRUE,
+            Should_Sync_W_Pardot__c=TRUE
+        );
+        insert ctc;
+        
+        Test.startTest();
+        
+        acct.Child_Should_Sync_W_Pardot__c = FALSE;
+        update acct;
+        
+        Test.stopTest();
+        
+        Account account = [
+            SELECT Id, Child_Should_Sync_W_Pardot__c
+            FROM Account
+            WHERE Id = :acct.Id
+        ];
+        
+        Contact contact = [
+            SELECT Id, Should_Sync_W_Pardot__c, Is_Pardot_Prospect__c
+            FROM Contact
+            WHERE Id = :ctc.Id
+        ];
+        
+        // Tests
+        // 1. The contact's Should_Sync_W_Pardot__c should be FALSE post operation.
+        // 2. The contact's Is_Pardot_Prospect__c should be FALSE post operation.
+        System.assertEquals(FALSE, contact.Should_Sync_W_Pardot__c);
+        System.assertEquals(FALSE, contact.Is_Pardot_Prospect__c);
+    }
+}

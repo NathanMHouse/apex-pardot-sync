@@ -1,0 +1,60 @@
+/**
+ * @class PardotJSONGenerator
+ * @description Helper class converts contact objects into JSON string.
+ *              
+ *
+ * @author  Nathan M. House
+ * @created 14/5/2020
+ *
+ * @link http://developer.pardot.com/kb/api-version-4/prospects/#endpoints-for-batch-processing
+ * @link https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_json_jsongenerator.htm
+ *
+ */
+public class PardotJSONGenerator {
+    
+    private List<Contact> ctcs = new List<Contact>();
+    
+    public PardotJSONGenerator(List<Contact> Contacts) {
+        ctcs = Contacts;
+    }
+
+    /**
+     * @class PardotProspect
+     * @description Prospect subclass. Provides template for individual
+     *              instatiation of contact/prospect.
+     *              
+     *
+     * @author  Nathan House
+     * @created 14/5/2020
+     *
+     */
+    private class PardotProspect {
+        
+        private String email;
+        private String first_name;
+        private String fid;
+        
+        public PardotProspect(String Email, String FirstName, String salesforceFId) {
+            this.email=Email;
+            this.first_name=FirstName;
+            this.fid=salesforceFId;
+        }
+    }
+    
+    public String generatePardotJSONContent() {
+        
+        JSONGenerator gen = JSON.createGenerator(true);
+        
+        List<PardotProspect> prospects = new List<PardotProspect>();
+        for(Contact ctc : ctcs) {
+            prospects.add(new PardotProspect(ctc.Email, ctc.FirstName, ctc.Id));
+        }
+        
+        gen.writeStartObject();
+        gen.writeObjectField('prospects', prospects);
+        gen.writeEndObject();
+        
+		return gen.getAsString();
+    }
+
+}

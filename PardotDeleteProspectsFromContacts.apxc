@@ -1,0 +1,56 @@
+/**
+ * @class PardotDeleteProspectsFromContacts
+ * @description Sets up batch job to delete prospect w/i Pardot
+ *              via API calls through PardotWebCallout helper class.
+ *              
+ *
+ * @author  Nathan M. House
+ * @created 14/5/2020
+ *
+ * @link http://developer.pardot.com/kb/api-version-4/prospects/
+ *
+ */
+public class PardotDeleteProspectsFromContacts implements Database.Batchable<Contact>, Database.AllowsCallouts {
+    
+	private List<Contact> ctcs;
+    private PardotWebCallout pWebCallout;
+    
+    public PardotDeleteProspectsFromContacts(
+        PardotWebCallout pardotWebCallout,
+        List<Contact> contacts,
+        Map<Id, Contact> ctcsMap
+    ) {
+	   
+        // Sets static variable to prevent trigger recursion
+        CheckRecursive.pardotBatchIDs.addAll(ctcsMap.keySet());
+        
+        pWebCallout = pardotWebCallout;
+        ctcs        = contacts;
+    }
+    
+    public Iterable<Contact> start(Database.BatchableContext BC) {
+       
+		return ctcs;
+    }
+    
+    public void execute(Database.BatchableContext BC, List<Contact> ctcs) {
+        
+        // Pardot does not provide a bulk delete endpoint for records.
+        // As such they must be looped over and deleted individually
+        // via their fId.
+        for (Contact ctc : ctcs) {
+            pWebCallout.makeAPIRequest(
+                'https://pi.pardot.com/api/prospect/version/4/do/delete/fid/?format=json',
+                'fid=' + ctc.Id
+            );
+        }
+    }
+    
+    public void finish(Database.BatchableContext BC) {
+        
+        for (Contact ctc : ctcs) {
+            ctc.Is_Pardot_Prospect__c = FALSE;
+        }
+        upsert ctcs;
+    }
+}

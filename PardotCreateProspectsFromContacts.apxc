@@ -1,0 +1,55 @@
+/**
+ * @class PardotCreateProspectsFromContacts
+ * @description Sets up batch job to create prospect w/i Pardot
+ *              via API calls through PardotWebCallout helper class.
+ *              
+ *
+ * @author  Nathan M. House
+ * @created 14/5/2020
+ *
+ * @link http://developer.pardot.com/kb/api-version-4/prospects/
+ *
+ */
+public class PardotCreateProspectsFromContacts implements Database.Batchable<Contact>, Database.AllowsCallouts {
+    
+	private List<Contact> ctcs;
+    private PardotWebCallout pWebCallout;
+    
+    public PardotCreateProspectsFromContacts(
+        PardotWebCallout pardotWebCallout,
+        List<Contact> contacts,
+        Map<Id, Contact> ctcsMap
+    ) { 
+
+        // Sets static variable to prevent trigger recursion
+        CheckRecursive.pardotBatchIDs.addAll(ctcsMap.keySet());
+
+        pWebCallout = pardotWebCallout;
+        ctcs        = contacts;
+    }
+    
+    public Iterable<Contact> start(Database.BatchableContext BC) {
+
+		return ctcs;
+    }
+    
+    public void execute(Database.BatchableContext BC, List<Contact> ctcs) {
+        
+        // Contact records must be converted into JSON to allow for
+        // bulk creation operation.
+        PardotJSONGenerator gen = new PardotJSONGenerator(ctcs);
+        
+        pWebCallout.makeAPIRequest(
+            'https://pi.pardot.com/api/prospect/version/4/do/batchUpsert?format=json',
+            'prospects=' + gen.generatePardotJSONContent()
+        );
+    }
+    
+    public void finish(Database.BatchableContext BC) {
+
+        for (Contact ctc : ctcs) {
+            ctc.Is_Pardot_Prospect__c = TRUE;
+        }
+        upsert ctcs;
+    }
+}

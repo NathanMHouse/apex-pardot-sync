@@ -1,0 +1,77 @@
+/**
+ * @class PardotWebCallout
+ * @description Helper class - makes HttpRequest to Pardot's API
+ *              (authentication and various CRUD operations).
+ *              
+ *
+ * @author  Nathan M. House
+ * @created 14/5/2020
+ *
+ * @link http://developer.pardot.com/
+ *
+ */
+public class PardotWebCallout {
+    
+    // Make generic Http call using specified URL and body.
+    public static HttpResponse makeHttpCallout(String url, String body) {
+        
+        HttpRequest  request  = new HttpRequest();
+        HttpResponse response = new HttpResponse();
+        Http         http     = new Http();
+        
+		request.setEndpoint(url);
+        request.setBody(body);
+        request.setMethod('POST');
+        
+        try {
+            response = http.send(request);
+            System.debug('::RESPONSE::' + response.getBody());
+            return response;
+        } catch(System.CalloutException e) {
+            System.debug('Error: ' + e);
+            return null;
+        }
+    }
+    
+    // Retrieve Pardot email value from custom settings (org defaults).
+    private static String getPardotEmail() {
+		
+        pardot_api_credentials__c credentials = pardot_api_credentials__c.getOrgDefaults();
+        return EncodingUtil.urlEncode(credentials.Email__c, 'UTF-8');
+    }
+    
+    // Retrieve Pardot password from custom settings (org defaults).
+    private static String getPardotPassword() {
+        
+        pardot_api_credentials__c credentials = pardot_api_credentials__c.getOrgDefaults();
+        return EncodingUtil.urlEncode(credentials.Password__c, 'UTF-8');
+    }
+    
+    // Retrieve Pardot user key from custom settings (org defaults).
+    private static String getPardotUserKey() {
+        
+        pardot_api_credentials__c credentials = pardot_api_credentials__c.getOrgDefaults();
+        return EncodingUtil.urlEncode(credentials.User_key__c, 'UTF-8');
+    }
+    
+    // Make HTTP cal to retrieve Pardot API key (used w/i all subsequent API calls).
+    private static String getAPIKey() {
+        HttpResponse response = makeHttpCallout(
+        	'https://pi.pardot.com/api/login/version/4?format=json',
+			'email=' + getPardotEmail() + '&password=' + getPardotPassword() + '&user_key=' + getPardotUserKey()
+        );
+        
+        // Parse JSON response
+        Map<String, Object> m = (Map<String, Object>) JSON.deserializeUntyped(response.getBody());
+        return (String.valueOf(m.get('api_key')) != null) ? String.valueOf(m.get('api_key')) : '';
+    }
+    
+    // Make HTTP call to Pardot API for specified request (e.g. create/delete prospect).
+    public void makeAPIRequest(String url, String body) {
+        
+        HttpResponse response = makeHttpCallout(
+        	url,
+            'user_key=' + getPardotUserKey() + '&api_key=' + getAPIKey() + '&' + body
+        );
+    }
+}

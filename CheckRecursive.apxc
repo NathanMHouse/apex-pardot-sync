@@ -1,0 +1,13 @@
+/**
+ * @class CheckRecursive
+ * @description Helper class - tracks records IDs (contacts) to
+ *              prevent trigger recursion.
+ *
+ * @author 	Nathan M. House
+ * @created 14/5/2020
+ *
+ */
+public class CheckRecursive {
+    public static List<Id> pardotBatchIDs  = new List<Id>();
+    public static List<Id> contactSyncIDs  = new List<Id>();
+}

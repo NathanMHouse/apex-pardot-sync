@@ -1,0 +1,36 @@
+/**
+ * @class PardotSync
+ * @description Sets up queuable job for synching of Pardot sync 
+ *              status.
+ *
+ * @author  Nathan M. House
+ * @created 14/5/2020
+ *
+ */
+public class PardotSync implements Queueable  {
+    
+    public final List<Contact> contacts;
+    
+    public PardotSync(List<Contact> ctcs, Map<Id, sObject> ctcsMap) {
+
+        // Sets static variable to prevent trigger recursion.
+        // (Disabled for testing).
+        if (!Test.isRunningTest()) {        
+            CheckRecursive.contactSyncIDs.addAll(ctcsMap.keySet());
+        }
+
+        contacts  = ctcs;
+    }
+    
+    // Contact's Pardot sync status is updated based on parent
+    // account's Pardot sync status.
+    public void execute(QueueableContext context) {
+        
+        Integer i = 0;
+        while (i < contacts.size()) {
+            contacts[i].Should_Sync_W_Pardot__c = contacts[i].Account.Child_Should_Sync_W_Pardot__c;
+            i++;
+        }
+        update contacts;
+    }
+}
